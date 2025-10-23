@@ -183,3 +183,66 @@
     (ok true)
   )
 )
+
+;; Update interest rate model parameters
+(define-public (update-interest-rate-model
+    (new-base-rate (optional uint))
+    (new-rate-multiplier (optional uint))
+    (new-optimal-utilization (optional uint))
+    (new-reserve-factor (optional uint))
+  )
+  (begin
+    (try! (check-owner))
+    
+    ;; Update each parameter if provided
+    (if (is-some new-base-rate)
+      (var-set base-rate (unwrap-panic new-base-rate))
+      true
+    )
+    
+    (if (is-some new-rate-multiplier)
+      (var-set rate-multiplier (unwrap-panic new-rate-multiplier))
+      true
+    )
+    
+    (if (is-some new-optimal-utilization)
+      (var-set optimal-utilization (unwrap-panic new-optimal-utilization))
+      true
+    )
+    
+    (if (is-some new-reserve-factor)
+      (var-set reserve-factor (unwrap-panic new-reserve-factor))
+      true
+    )
+    
+    (ok true)
+  )
+)
+
+;; Emergency pause for all protocol operations
+(define-public (set-protocol-pause (paused bool))
+  (begin
+    (try! (check-owner))
+    (var-set protocol-paused paused)
+    (ok true)
+  )
+)
+
+;; Register pending BTC collateral operation
+(define-public (register-btc-collateral (bitcoin-tx-id (buff 32)) (amount uint))
+  (begin
+    (try! (check-protocol-active))
+    
+    ;; Store the pending BTC collateral operation
+    (map-set pending-btc-collateral
+      { bitcoin-tx-id: bitcoin-tx-id }
+      {
+        user: tx-sender,
+        amount: amount,
+        status: "pending"
+      }
+    )
+    
+    (ok true)
+  )
+)
