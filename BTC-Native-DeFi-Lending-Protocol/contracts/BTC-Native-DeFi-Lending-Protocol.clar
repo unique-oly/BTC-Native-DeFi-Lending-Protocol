@@ -356,3 +356,110 @@
     (ok pending-amount)
   )
 )
+
+(define-constant ERR_PROPOSAL_NOT_FOUND (err u220))
+(define-constant ERR_VOTING_PERIOD_ENDED (err u221))
+(define-constant ERR_ALREADY_VOTED (err u222))
+(define-constant ERR_INSUFFICIENT_VOTING_POWER (err u223))
+
+(define-data-var min-proposal-threshold uint u100000) ;; Min tokens needed to create proposal
+(define-data-var voting-period uint u1008) ;; ~1 week in blocks
+(define-data-var quorum-threshold uint u400) ;; 40% quorum required
+
+;; Proposal tracking
+(define-map proposals
+  { proposal-id: uint }
+  {
+    proposer: principal,
+    title: (string-ascii 100),
+    description: (string-ascii 500),
+    for-votes: uint,
+    against-votes: uint,
+    start-block: uint,
+    end-block: uint,
+    executed: bool,
+    action-type: (string-ascii 50) ;; "parameter-change", "asset-addition", etc.
+  }
+)
+
+(define-constant ERR_PROTECTION_ALREADY_ACTIVE (err u240))
+(define-constant ERR_PROTECTION_NOT_FOUND (err u241))
+
+(define-map liquidation-protection
+  { user: principal }
+  {
+    protection-fee-paid: uint,
+    protection-expires: uint,
+    max-protection-amount: uint
+  }
+)
+
+(define-data-var protection-fee-rate uint u50) ;; 0.5% fee for protection
+
+(define-public (purchase-liquidation-protection (protection-amount uint) (duration-blocks uint))
+  (let 
+    (
+      (fee (/ (* protection-amount (var-get protection-fee-rate)) u10000))
+      (expiry-block (+ stacks-block-height duration-blocks))
+    )
+    
+    (asserts! (is-none (map-get? liquidation-protection { user: tx-sender })) ERR_PROTECTION_ALREADY_ACTIVE)
+    
+    (map-set liquidation-protection
+      { user: tx-sender }
+      {
+        protection-fee-paid: fee,
+        protection-expires: expiry-block,
+        max-protection-amount: protection-amount
+      }
+    )
+    
+    (ok true)
+  )
+)
+
+(define-constant ERR_BRIDGE_OPERATION_FAILED (err u250))
+(define-constant ERR_INVALID_CHAIN_ID (err u251))
+
+(define-map cross-chain-operations
+  { operation-id: uint }
+  {
+    user: principal,
+    source-chain: uint,
+    dest-chain: uint,
+    asset: principal,
+    amount: uint,
+    status: (string-ascii 20)
+  }
+)
+
+(define-data-var next-operation-id uint u1)
+
+(define-public (initiate-cross-chain-transfer 
+    (dest-chain uint) 
+    (asset-contract principal) 
+    (amount uint)
+  )
+  (let 
+    (
+      (operation-id (var-get next-operation-id))
+    )
+    
+    (try! (check-protocol-active))
+    
+    (map-set cross-chain-operations
+      { operation-id: operation-id }
+      {
+        user: tx-sender,
+        source-chain: u1, ;; Stacks chain ID
+        dest-chain: dest-chain,
+        asset: asset-contract,
+        amount: amount,
+        status: "initiated"
+      }
+    )
+    
+    (var-set next-operation-id (+ operation-id u1))
+    (ok operation-id)
+  )
+)
